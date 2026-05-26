@@ -11,8 +11,9 @@ const PUBLIC_PATHS = new Set<string>(["/login"]);
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
-  if (pathname.startsWith("/api/auth/login")) return true;
-  if (pathname.startsWith("/api/auth/logout")) return true;
+  // Auth endpoints must be reachable without a session.
+  if (pathname.startsWith("/api/auth/")) return true;
+  // Seed is idempotent and useful for first-time bootstrap.
   if (pathname.startsWith("/api/seed")) return true;
   return false;
 }
