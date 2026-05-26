@@ -7,8 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SKILL_EMOJI, SKILL_LABELS } from "@/lib/gamification";
 import { useProgress } from "@/contexts/progress-context";
 import { useToast } from "@/contexts/toast-context";
-import { useJournal } from "@/contexts/journal-context";
-import { ACHIEVEMENTS } from "@/data/achievements";
+import { useAchievements } from "@/contexts/achievements-context";
 import { cn } from "@/lib/utils";
 import type { PlanTask } from "@/types";
 
@@ -28,34 +27,41 @@ const skillTone: Record<string, "emerald" | "sky" | "amber" | "violet" | "rose" 
 
 export function TaskItem({ task }: TaskItemProps) {
   const { isTaskComplete, toggleTask } = useProgress();
-  const { entries: journalEntries } = useJournal();
+  const { achievements } = useAchievements();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
+  const [pending, setPending] = useState(false);
 
   const done = isTaskComplete(task.id);
 
-  function handleToggle(next: boolean) {
-    const result = toggleTask(task.id, journalEntries.length);
-    if (!result) return;
-    if (next && result.xpDelta > 0) {
-      toast({
-        title: `+${result.xpDelta} XP earned`,
-        description: task.title,
-        variant: "xp",
-      });
-      result.unlocks.forEach((id) => {
-        const def = ACHIEVEMENTS.find((a) => a.id === id);
-        if (def) {
-          setTimeout(() => {
-            toast({
-              title: `Achievement: ${def.title}`,
-              description: def.description,
-              variant: "achievement",
-              duration: 4500,
-            });
-          }, 600);
-        }
-      });
+  async function handleToggle(next: boolean) {
+    if (pending) return;
+    setPending(true);
+    try {
+      const result = await toggleTask(task.id);
+      if (!result) return;
+      if (next && result.xpDelta > 0) {
+        toast({
+          title: `+${result.xpDelta} XP earned`,
+          description: task.title,
+          variant: "xp",
+        });
+        result.unlocks.forEach((id) => {
+          const def = achievements.find((a) => a.id === id);
+          if (def) {
+            setTimeout(() => {
+              toast({
+                title: `Achievement: ${def.title}`,
+                description: def.description,
+                variant: "achievement",
+                duration: 4500,
+              });
+            }, 600);
+          }
+        });
+      }
+    } finally {
+      setPending(false);
     }
   }
 

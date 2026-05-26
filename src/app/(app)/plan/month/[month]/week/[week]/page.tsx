@@ -7,7 +7,7 @@ import { ArrowLeft, Check, Target } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { getMonth, getWeek, dayTaskIds } from "@/data/plan";
+import { usePlan } from "@/contexts/plan-context";
 import { useProgress } from "@/contexts/progress-context";
 import { percent } from "@/lib/utils";
 
@@ -19,12 +19,14 @@ export default function WeekPage({
   const { month: monthParam, week: weekParam } = use(params);
   const monthIndex = Number(monthParam);
   const weekIndex = Number(weekParam);
+  const { getMonth, getWeek, dayTaskIds, loading } = usePlan();
   const month = getMonth(monthIndex);
   const week = getWeek(monthIndex, weekIndex);
   const { state } = useProgress();
   const completed = new Set(state.completedTaskIds);
 
-  if (!month || !week) notFound();
+  if ((!month || !week) && !loading) notFound();
+  if (!month || !week) return null;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 max-w-3xl mx-auto space-y-7 fade-up">

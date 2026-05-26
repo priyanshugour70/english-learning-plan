@@ -1,41 +1,34 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 
+import { api, fetcher } from "@/lib/api";
 import { todayKey } from "@/lib/dates";
-import { uid } from "@/lib/utils";
-import { useLocalState } from "@/hooks/use-local-state";
 import type { VocabularyEntry } from "@/types";
 
-const KEY = "vocabulary";
+import { useAuth } from "./auth-context";
 
-const REVIEW_GAPS: Record<VocabularyEntry["box"], number> = {
-  1: 1,
-  2: 2,
-  3: 4,
-  4: 8,
-  5: 16,
-};
+interface VocabResponse {
+  entries: VocabularyEntry[];
+}
 
-function dueDateFor(box: VocabularyEntry["box"], from: Date = new Date()) {
-  const d = new Date(from);
-  d.setDate(d.getDate() + REVIEW_GAPS[box]);
-  return d.toISOString();
+interface CreateInput {
+  word: string;
+  meaning: string;
+  exampleSentence?: string;
+  partOfSpeech?: string;
+  tags?: string[];
 }
 
 interface VocabularyContextValue {
   entries: VocabularyEntry[];
   hydrated: boolean;
-  add: (input: {
-    word: string;
-    meaning: string;
-    exampleSentence?: string;
-    partOfSpeech?: string;
-    tags?: string[];
-  }) => VocabularyEntry;
-  update: (id: string, patch: Partial<VocabularyEntry>) => void;
-  remove: (id: string) => void;
-  markReview: (id: string, knew: boolean) => void;
+  loading: boolean;
+  add: (input: CreateInput) => Promise<VocabularyEntry | null>;
+  update: (id: string, patch: Partial<VocabularyEntry>) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  markReview: (id: string, knew: boolean) => Promise<void>;
   dueToday: VocabularyEntry[];
 }
 
@@ -48,69 +41,102 @@ export function VocabularyProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [entries, setEntries, hydrated] = useLocalState<VocabularyEntry[]>(
-    KEY,
-    [],
+  const { user } = useAuth();
+  const { data, isLoading, mutate } = useSWR<VocabResponse>(
+    user ? "/api/vocabulary" : null,
+    fetcher,
+    { revalidateOnFocus: false },
   );
 
+  const entries = React.useMemo(() => data?.entries ?? [], [data]);
+  const hydrated = !!data;
+
   const add = React.useCallback<VocabularyContextValue["add"]>(
-    (input) => {
-      const now = new Date();
-      const entry: VocabularyEntry = {
-        id: uid("v"),
-        word: input.word.trim(),
-        meaning: input.meaning.trim(),
-        exampleSentence: input.exampleSentence?.trim() || undefined,
-        partOfSpeech: input.partOfSpeech,
-        tags: input.tags,
-        box: 1,
-        lastReviewedAt: undefined,
-        nextReviewAt: dueDateFor(1, now),
-        reviewCount: 0,
-        createdAt: now.toISOString(),
-      };
-      setEntries((prev) => [entry, ...prev]);
-      return entry;
+    async (input) => {
+      try {
+        const res = await api<{ entry: VocabularyEntry }>("/api/vocabulary", {
+          method: "POST",
+          body: input,
+        });
+        await mutate(
+          (prev) => ({
+            entries: [res.entry, ...(prev?.entries ?? [])],
+          }),
+          { revalidate: false },
+        );
+        return res.entry;
+      } catch (e) {
+        console.error("[vocab.add]", e);
+        return null;
+      }
     },
-    [setEntries],
+    [mutate],
   );
 
   const update = React.useCallback(
-    (id: string, patch: Partial<VocabularyEntry>) => {
-      setEntries((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+    async (id: string, patch: Partial<VocabularyEntry>) => {
+      await mutate(
+        async () => {
+          await api<{ ok: true }>(`/api/vocabulary/${id}`, {
+            method: "PATCH",
+            body: patch,
+          });
+          return {
+            entries: (data?.entries ?? []).map((e) =>
+              e.id === id ? { ...e, ...patch } : e,
+            ),
+          };
+        },
+        {
+          optimisticData: {
+            entries: (data?.entries ?? []).map((e) =>
+              e.id === id ? { ...e, ...patch } : e,
+            ),
+          },
+          rollbackOnError: true,
+          revalidate: false,
+        },
       );
     },
-    [setEntries],
+    [data, mutate],
   );
 
   const remove = React.useCallback(
-    (id: string) => {
-      setEntries((prev) => prev.filter((e) => e.id !== id));
+    async (id: string) => {
+      await mutate(
+        async () => {
+          await api<{ ok: true }>(`/api/vocabulary/${id}`, {
+            method: "DELETE",
+          });
+          return {
+            entries: (data?.entries ?? []).filter((e) => e.id !== id),
+          };
+        },
+        {
+          optimisticData: {
+            entries: (data?.entries ?? []).filter((e) => e.id !== id),
+          },
+          rollbackOnError: true,
+          revalidate: false,
+        },
+      );
     },
-    [setEntries],
+    [data, mutate],
   );
 
   const markReview = React.useCallback(
-    (id: string, knew: boolean) => {
-      const now = new Date();
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== id) return e;
-          const newBox = (
-            knew ? Math.min(5, e.box + 1) : Math.max(1, e.box - 1)
-          ) as VocabularyEntry["box"];
-          return {
-            ...e,
-            box: newBox,
-            reviewCount: e.reviewCount + 1,
-            lastReviewedAt: now.toISOString(),
-            nextReviewAt: dueDateFor(newBox, now),
-          };
-        }),
-      );
+    async (id: string, knew: boolean) => {
+      try {
+        await api(`/api/vocabulary/${id}/review`, {
+          method: "POST",
+          body: { knew },
+        });
+        await mutate();
+      } catch (e) {
+        console.error("[vocab.markReview]", e);
+      }
     },
-    [setEntries],
+    [mutate],
   );
 
   const dueToday = React.useMemo(() => {
@@ -122,8 +148,17 @@ export function VocabularyProvider({
   }, [entries]);
 
   const value = React.useMemo<VocabularyContextValue>(
-    () => ({ entries, hydrated, add, update, remove, markReview, dueToday }),
-    [entries, hydrated, add, update, remove, markReview, dueToday],
+    () => ({
+      entries,
+      hydrated,
+      loading: isLoading,
+      add,
+      update,
+      remove,
+      markReview,
+      dueToday,
+    }),
+    [entries, hydrated, isLoading, add, update, remove, markReview, dueToday],
   );
 
   return (

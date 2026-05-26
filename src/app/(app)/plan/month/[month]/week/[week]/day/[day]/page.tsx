@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { TaskItem } from "@/components/plan/task-item";
-import { getDay, getMonth, getWeek } from "@/data/plan";
+import { usePlan } from "@/contexts/plan-context";
 import { useProgress } from "@/contexts/progress-context";
 import { percent } from "@/lib/utils";
 
@@ -21,13 +21,15 @@ export default function DayPage({
   const monthIndex = Number(monthParam);
   const weekIndex = Number(weekParam);
   const dayIndex = Number(dayParam);
+  const { getMonth, getWeek, getDay, loading } = usePlan();
   const month = getMonth(monthIndex);
   const week = getWeek(monthIndex, weekIndex);
   const day = getDay(monthIndex, weekIndex, dayIndex);
 
   const { state } = useProgress();
 
-  if (!month || !week || !day) notFound();
+  if ((!month || !week || !day) && !loading) notFound();
+  if (!month || !week || !day) return null;
 
   const totalMinutes = day.tasks.reduce((acc, t) => acc + t.minutes, 0);
   const totalXp = day.tasks.reduce((acc, t) => acc + t.xp, 0);

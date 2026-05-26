@@ -4,12 +4,14 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { OnboardingScreen } from "@/components/onboarding/onboarding-screen";
+import { useAuth } from "@/contexts/auth-context";
 import { useSettings } from "@/contexts/settings-context";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const { settings, hydrated } = useSettings();
 
-  if (!hydrated) {
+  if (authLoading || !user || !hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />

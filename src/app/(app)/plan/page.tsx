@@ -5,7 +5,7 @@ import { ArrowRight, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { PLAN, monthTaskIds, TOTAL_TASKS } from "@/data/plan";
+import { usePlan } from "@/contexts/plan-context";
 import { useProgress } from "@/contexts/progress-context";
 import { useCurrentPlanPosition } from "@/hooks/use-current-plan-position";
 import { percent, cn } from "@/lib/utils";
@@ -33,6 +33,8 @@ const accentText: Record<string, string> = {
 export default function PlanPage() {
   const { state } = useProgress();
   const pos = useCurrentPlanPosition();
+  const { plan, monthTaskIds, stats } = usePlan();
+  const TOTAL_TASKS = stats.totalTasks;
   const completed = new Set(state.completedTaskIds);
   const overallPct = percent(state.completedTaskIds.length, TOTAL_TASKS);
 
@@ -46,7 +48,8 @@ export default function PlanPage() {
           Your 6-month journey
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">
-          6 months · 24 weeks · {TOTAL_TASKS} tasks. Built to grow with you week by week.
+          {stats.totalMonths} months · {stats.totalWeeks} weeks ·{" "}
+          {TOTAL_TASKS} tasks. Built to grow with you week by week.
         </p>
         <div className="mt-4 max-w-md">
           <div className="flex items-center justify-between mb-1.5 text-xs text-muted-foreground">
@@ -58,7 +61,7 @@ export default function PlanPage() {
       </div>
 
       <div className="space-y-3">
-        {PLAN.map((m) => {
+        {plan.map((m) => {
           const ids = monthTaskIds(m.index);
           const doneCount = ids.filter((id) => completed.has(id)).length;
           const monthPct = percent(doneCount, ids.length);

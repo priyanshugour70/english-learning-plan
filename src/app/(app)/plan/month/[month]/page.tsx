@@ -7,7 +7,7 @@ import { ArrowLeft, Check, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { getMonth, weekTaskIds } from "@/data/plan";
+import { usePlan } from "@/contexts/plan-context";
 import { useProgress } from "@/contexts/progress-context";
 import { percent, cn } from "@/lib/utils";
 
@@ -38,13 +38,15 @@ export default function MonthPage({
 }) {
   const { month: monthParam } = use(params);
   const monthIndex = Number(monthParam);
+  const { getMonth, weekTaskIds, loading } = usePlan();
   const month = getMonth(monthIndex);
   const { state } = useProgress();
   const completed = new Set(state.completedTaskIds);
 
-  if (!month) {
+  if (!month && !loading) {
     notFound();
   }
+  if (!month) return null;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 max-w-4xl mx-auto space-y-7 fade-up">

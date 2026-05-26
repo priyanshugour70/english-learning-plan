@@ -9,13 +9,14 @@ import { Button } from "@/components/ui/button";
 import { TaskItem } from "@/components/plan/task-item";
 import { useCurrentPlanPosition } from "@/hooks/use-current-plan-position";
 import { useProgress } from "@/contexts/progress-context";
-import { getDay, getMonth, getWeek, PLAN } from "@/data/plan";
+import { usePlan } from "@/contexts/plan-context";
 import { formatDayLabel } from "@/lib/dates";
 import { percent } from "@/lib/utils";
 
 export default function TodayPage() {
   const pos = useCurrentPlanPosition();
   const { state } = useProgress();
+  const { plan, getMonth, getWeek, getDay } = usePlan();
   const month = getMonth(pos.monthIndex);
   const week = getWeek(pos.monthIndex, pos.weekIndex);
   const day = getDay(pos.monthIndex, pos.weekIndex, pos.dayIndex);
@@ -45,8 +46,8 @@ export default function TodayPage() {
       if (w < 1) {
         m -= 1;
         if (m < 1) return null;
-        const prevMonth = PLAN[m - 1];
-        w = prevMonth.weeks.length;
+        const prevMonth = plan[m - 1];
+        w = prevMonth?.weeks.length ?? 1;
       }
       const targetWeek = getWeek(m, w);
       d = targetWeek ? targetWeek.days.length : 1;
@@ -67,7 +68,7 @@ export default function TodayPage() {
       if (!nextWeekExists) {
         w = 1;
         m += 1;
-        if (m > PLAN.length) return null;
+        if (m > plan.length) return null;
       }
     }
     return { m, w, d };

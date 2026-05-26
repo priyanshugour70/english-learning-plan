@@ -1,6 +1,6 @@
 # Fluent Path
 
-A production-grade, gamified, offline-first **6-month English fluency** web app — built on **Next.js 16** (App Router, Turbopack, React Compiler), **React 19.2**, and **Tailwind v4**.
+A production-grade, gamified, full-stack **6-month English fluency** web app — built on **Next.js 16** (App Router + Route Handlers + Proxy, Turbopack, React Compiler), **React 19.2**, **MongoDB Atlas**, and **Tailwind v4**.
 
 > "Six months from now, you'll walk into any room and speak with calm."
 
@@ -26,7 +26,8 @@ A complete, opinionated daily plan you can actually follow:
 | **Journal**         | Daily English diary with prompts, mood, word count                           |
 | **Practice studio** | Browser-based recorder (MediaRecorder), 4 prompt categories, session history |
 | **Achievements**    | 19 badges across 4 tiers — streak, XP, skill, and milestones                 |
-| **Settings**        | Theme, daily time, profile, **export / import / hard-reset** all data        |
+| **Settings**        | Theme, daily time, profile, **re-seed plan**, **reset progress**, sign out   |
+| **Auth**            | Single-creator login (email + password), JWT session cookies, route protection |
 | **Onboarding**      | 3-step gentle welcome the first time                                         |
 
 ### Gamification
@@ -52,10 +53,13 @@ A complete, opinionated daily plan you can actually follow:
 - **Next.js 16 App Router** with route groups (`(app)`) and Next-16-correct **async `params`** unwrapped via `React.use()`
 - **React Compiler** enabled — components auto-memoized
 - **Turbopack** dev & build (default in v16)
-- **localStorage** persistence with SSR-safe hydration pattern (each context tracks `hydrated`)
-- **No backend, no auth, no tracking** — your data lives only on your device
+- **MongoDB Atlas** for all persistence (plan, achievements, progress, vocab, journal, recordings, settings, users)
+- **Next.js Route Handlers** (`src/app/api/**`) for the backend — no separate server
+- **Proxy** (`src/proxy.ts`, the new name for Middleware in v16) gates protected pages
+- **`jose`** JWT in an `httpOnly` `SameSite=Lax` cookie for stateless sessions
+- **`bcryptjs`** for password hashing (rounds=12)
+- **SWR** + optimistic `mutate` on the client; the static `src/data/plan/*.ts` files are still the seed source but are immediately mirrored into MongoDB
 - Strict TypeScript with full domain model in `src/types/`
-- Zero runtime dependencies beyond `lucide-react`, `clsx`, `tailwind-merge`, `date-fns`
 
 ---
 
@@ -63,10 +67,14 @@ A complete, opinionated daily plan you can actually follow:
 
 ```bash
 pnpm install
+cp .env.example .env.local
+# fill in MONGODB_URI, SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
 pnpm dev
 ```
 
-Then open [http://localhost:3000](http://localhost:3000).
+Then open [http://localhost:3000](http://localhost:3000) — you'll be redirected to `/login`. Sign in with the `ADMIN_*` credentials you configured; the account is created on the first successful login.
+
+After signing in, open `/api/seed` once (GET) to push the plan and achievement catalog into MongoDB. (Subsequent requests are idempotent; `POST /api/seed?force=1` re-pushes the plan from code.)
 
 ```bash
 pnpm build   # production build (Turbopack)
@@ -110,17 +118,58 @@ src/
 │   ├── plan/                       # task-item
 │   ├── practice/                   # recorder
 │   └── onboarding/                 # onboarding-screen
-├── contexts/                       # theme, settings, progress, vocabulary, journal, recordings, toast
+├── contexts/                       # auth, theme, settings, progress, plan, vocabulary, journal, recordings, achievements, toast
 ├── data/
-│   ├── achievements.ts
+│   ├── achievements.ts             # seed catalog
 │   └── plan/
 │       ├── helpers.ts              # task factories per skill
 │       ├── month-1.ts ... month-6.ts
-│       └── index.ts                # PLAN + lookups
+│       └── index.ts                # PLAN + lookups (seed source)
 ├── hooks/
 │   └── use-current-plan-position.ts
-├── lib/                            # utils, dates, storage, gamification
+├── lib/
+│   ├── api.ts                      # fetch wrapper + SWR fetcher
+│   ├── auth/                       # password, session, server helpers
+│   ├── db/                         # mongo client, collection accessors, plan/progress services
+│   ├── dates.ts, utils.ts, gamification.ts
+│   └── storage.ts                  # (legacy) localStorage helpers
+├── proxy.ts                        # route protection (the "middleware" of Next 16)
 └── types/                          # all TS types
+```
+
+### API surface
+
+```
+POST   /api/auth/login         { email, password }   → { user }
+POST   /api/auth/logout                              → { ok: true }
+GET    /api/auth/me                                  → { user | null }
+
+GET    /api/plan                                     → { plan, stats }
+GET    /api/achievements                             → { achievements }
+
+GET    /api/progress                                 → { state }
+DELETE /api/progress                                 → reset XP/streak/history
+POST   /api/progress/toggle    { taskId }            → { state, unlocks, xpDelta }
+
+GET    /api/vocabulary
+POST   /api/vocabulary         { word, meaning, ... }
+PATCH  /api/vocabulary/:id     { ...patch }
+DELETE /api/vocabulary/:id
+POST   /api/vocabulary/:id/review  { knew: boolean }
+
+GET    /api/journal
+POST   /api/journal            { text, mood?, prompt? }  → upserts today
+DELETE /api/journal/:id
+
+GET    /api/recordings
+POST   /api/recordings         { prompt, duration, selfRating?, notes? }
+DELETE /api/recordings/:id
+
+GET    /api/settings
+PATCH  /api/settings           { name?, goal?, theme?, ... }
+
+GET    /api/seed                                     → idempotent first-time seed
+POST   /api/seed?force=1                             → re-push plan + achievements
 ```
 
 ---
@@ -137,9 +186,13 @@ Month 1 lays the foundation. Month 6 graduates you with mock interviews, present
 
 ---
 
-## 🔒 Privacy
+## 🔒 Privacy & auth
 
-Everything — progress, XP, vocabulary, journal, recordings metadata, achievements — is stored **only in your browser** (`localStorage`). There is no account, no server, no tracking. Export anytime from Settings.
+- Single-creator account, gated by email + password.
+- Passwords are hashed with bcrypt (cost 12) before they ever touch the database.
+- Sessions are stateless JWTs signed with `SESSION_SECRET`, delivered as an httpOnly, SameSite=Lax cookie that expires after 30 days.
+- Every API route re-validates the session — the proxy is only a fast optimistic check (see `node_modules/next/dist/docs/01-app/02-guides/authentication.md`).
+- All user data lives in your MongoDB Atlas cluster, scoped by `userId`.
 
 ---
 

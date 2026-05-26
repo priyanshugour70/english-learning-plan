@@ -1,24 +1,30 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 
-import { todayKey } from "@/lib/dates";
-import { uid } from "@/lib/utils";
-import { useLocalState } from "@/hooks/use-local-state";
+import { api, fetcher } from "@/lib/api";
 import type { RecordingSession } from "@/types";
 
-const KEY = "recordings";
+import { useAuth } from "./auth-context";
+
+interface RecordingsResponse {
+  sessions: RecordingSession[];
+}
+
+interface LogInput {
+  prompt: string;
+  duration: number;
+  selfRating?: RecordingSession["selfRating"];
+  notes?: string;
+}
 
 interface RecordingsContextValue {
   sessions: RecordingSession[];
   hydrated: boolean;
-  log: (input: {
-    prompt: string;
-    duration: number;
-    selfRating?: RecordingSession["selfRating"];
-    notes?: string;
-  }) => RecordingSession;
-  remove: (id: string) => void;
+  loading: boolean;
+  log: (input: LogInput) => Promise<RecordingSession | null>;
+  remove: (id: string) => Promise<void>;
 }
 
 const RecordingsContext = React.createContext<RecordingsContextValue | null>(
@@ -30,38 +36,62 @@ export function RecordingsProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [sessions, setSessions, hydrated] = useLocalState<RecordingSession[]>(
-    KEY,
-    [],
+  const { user } = useAuth();
+  const { data, isLoading, mutate } = useSWR<RecordingsResponse>(
+    user ? "/api/recordings" : null,
+    fetcher,
+    { revalidateOnFocus: false },
   );
 
+  const sessions = React.useMemo(() => data?.sessions ?? [], [data]);
+  const hydrated = !!data;
+
   const log = React.useCallback<RecordingsContextValue["log"]>(
-    (input) => {
-      const session: RecordingSession = {
-        id: uid("r"),
-        date: todayKey(),
-        prompt: input.prompt,
-        duration: input.duration,
-        selfRating: input.selfRating,
-        notes: input.notes,
-        createdAt: new Date().toISOString(),
-      };
-      setSessions((prev) => [session, ...prev]);
-      return session;
+    async (input) => {
+      try {
+        const res = await api<{ session: RecordingSession }>(
+          "/api/recordings",
+          { method: "POST", body: input },
+        );
+        await mutate(
+          (prev) => ({
+            sessions: [res.session, ...(prev?.sessions ?? [])],
+          }),
+          { revalidate: false },
+        );
+        return res.session;
+      } catch (e) {
+        console.error("[recordings.log]", e);
+        return null;
+      }
     },
-    [setSessions],
+    [mutate],
   );
 
   const remove = React.useCallback(
-    (id: string) => {
-      setSessions((prev) => prev.filter((s) => s.id !== id));
+    async (id: string) => {
+      await mutate(
+        async () => {
+          await api(`/api/recordings/${id}`, { method: "DELETE" });
+          return {
+            sessions: (data?.sessions ?? []).filter((s) => s.id !== id),
+          };
+        },
+        {
+          optimisticData: {
+            sessions: (data?.sessions ?? []).filter((s) => s.id !== id),
+          },
+          rollbackOnError: true,
+          revalidate: false,
+        },
+      );
     },
-    [setSessions],
+    [data, mutate],
   );
 
   const value = React.useMemo<RecordingsContextValue>(
-    () => ({ sessions, hydrated, log, remove }),
-    [sessions, hydrated, log, remove],
+    () => ({ sessions, hydrated, loading: isLoading, log, remove }),
+    [sessions, hydrated, isLoading, log, remove],
   );
 
   return (

@@ -1,83 +1,88 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 
+import { api, fetcher } from "@/lib/api";
 import { todayKey } from "@/lib/dates";
-import { uid } from "@/lib/utils";
-import { useLocalState } from "@/hooks/use-local-state";
 import type { JournalEntry } from "@/types";
 
-const KEY = "journal";
+import { useAuth } from "./auth-context";
 
-function countWords(s: string) {
-  return s.trim().length === 0 ? 0 : s.trim().split(/\s+/).length;
+interface JournalResponse {
+  entries: JournalEntry[];
 }
 
 interface JournalContextValue {
   entries: JournalEntry[];
   hydrated: boolean;
+  loading: boolean;
   todayEntry: JournalEntry | undefined;
   upsertToday: (
     text: string,
     mood?: JournalEntry["mood"],
     prompt?: string,
-  ) => JournalEntry;
-  remove: (id: string) => void;
+  ) => Promise<JournalEntry | null>;
+  remove: (id: string) => Promise<void>;
 }
 
 const JournalContext = React.createContext<JournalContextValue | null>(null);
 
 export function JournalProvider({ children }: { children: React.ReactNode }) {
-  const [entries, setEntries, hydrated] = useLocalState<JournalEntry[]>(
-    KEY,
-    [],
+  const { user } = useAuth();
+  const { data, isLoading, mutate } = useSWR<JournalResponse>(
+    user ? "/api/journal" : null,
+    fetcher,
+    { revalidateOnFocus: false },
   );
 
+  const entries = React.useMemo(() => data?.entries ?? [], [data]);
+  const hydrated = !!data;
+
   const upsertToday = React.useCallback<JournalContextValue["upsertToday"]>(
-    (text, mood, prompt) => {
-      const day = todayKey();
-      const now = new Date().toISOString();
-      let resultEntry: JournalEntry | null = null;
-      setEntries((prev) => {
-        const idx = prev.findIndex((e) => e.date === day);
-        const wordCount = countWords(text);
-        if (idx >= 0) {
-          const merged: JournalEntry = {
-            ...prev[idx],
-            text,
-            wordCount,
-            mood: mood ?? prev[idx].mood,
-            prompt: prompt ?? prev[idx].prompt,
-            updatedAt: now,
-          };
-          const next = [...prev];
-          next[idx] = merged;
-          resultEntry = merged;
-          return next;
-        }
-        const fresh: JournalEntry = {
-          id: uid("j"),
-          date: day,
-          text,
-          mood,
-          prompt,
-          wordCount,
-          createdAt: now,
-          updatedAt: now,
-        };
-        resultEntry = fresh;
-        return [fresh, ...prev];
-      });
-      return resultEntry as unknown as JournalEntry;
+    async (text, mood, prompt) => {
+      try {
+        const res = await api<{ entry: JournalEntry }>("/api/journal", {
+          method: "POST",
+          body: { text, mood, prompt },
+        });
+        // Replace today's entry in-place, else prepend.
+        await mutate((prev) => {
+          const list = prev?.entries ?? [];
+          const idx = list.findIndex((e) => e.date === res.entry.date);
+          if (idx >= 0) {
+            const next = list.slice();
+            next[idx] = res.entry;
+            return { entries: next };
+          }
+          return { entries: [res.entry, ...list] };
+        }, { revalidate: false });
+        return res.entry;
+      } catch (e) {
+        console.error("[journal.upsertToday]", e);
+        return null;
+      }
     },
-    [setEntries],
+    [mutate],
   );
 
   const remove = React.useCallback(
-    (id: string) => {
-      setEntries((prev) => prev.filter((e) => e.id !== id));
+    async (id: string) => {
+      await mutate(
+        async () => {
+          await api(`/api/journal/${id}`, { method: "DELETE" });
+          return { entries: (data?.entries ?? []).filter((e) => e.id !== id) };
+        },
+        {
+          optimisticData: {
+            entries: (data?.entries ?? []).filter((e) => e.id !== id),
+          },
+          rollbackOnError: true,
+          revalidate: false,
+        },
+      );
     },
-    [setEntries],
+    [data, mutate],
   );
 
   const todayEntry = React.useMemo(() => {
@@ -86,8 +91,15 @@ export function JournalProvider({ children }: { children: React.ReactNode }) {
   }, [entries]);
 
   const value = React.useMemo<JournalContextValue>(
-    () => ({ entries, hydrated, todayEntry, upsertToday, remove }),
-    [entries, hydrated, todayEntry, upsertToday, remove],
+    () => ({
+      entries,
+      hydrated,
+      loading: isLoading,
+      todayEntry,
+      upsertToday,
+      remove,
+    }),
+    [entries, hydrated, isLoading, todayEntry, upsertToday, remove],
   );
 
   return (

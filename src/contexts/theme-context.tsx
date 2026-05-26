@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { useLocalState } from "@/hooks/use-local-state";
+import { useSettings } from "./settings-context";
 
 type Theme = "system" | "light" | "dark";
 type Resolved = "light" | "dark";
@@ -16,7 +16,7 @@ interface ThemeContextValue {
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = "theme";
+const LOCAL_CACHE_KEY = "fluentpath:v1:theme";
 
 function subscribeMedia(callback: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -44,7 +44,8 @@ function applyClass(resolved: Resolved) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeRaw] = useLocalState<Theme>(STORAGE_KEY, "system");
+  const { settings, update } = useSettings();
+  const theme: Theme = settings.theme ?? "system";
 
   const systemPref = React.useSyncExternalStore(
     subscribeMedia,
@@ -58,11 +59,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyClass(resolved);
   }, [resolved]);
 
+  // Mirror to localStorage so the inline no-flash script picks it up on next load.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(theme));
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+
   const setTheme = React.useCallback(
     (next: Theme) => {
-      setThemeRaw(next);
+      void update({ theme: next });
     },
-    [setThemeRaw],
+    [update],
   );
 
   const toggle = React.useCallback(() => {

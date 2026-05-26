@@ -4,7 +4,7 @@ import { Lock, Trophy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { ACHIEVEMENTS } from "@/data/achievements";
+import { useAchievements } from "@/contexts/achievements-context";
 import { useProgress } from "@/contexts/progress-context";
 import { levelFromXp } from "@/lib/gamification";
 import { percent } from "@/lib/utils";
@@ -13,9 +13,10 @@ const tierLabels = ["Bronze", "Silver", "Gold", "Diamond"] as const;
 
 export default function AchievementsPage() {
   const { state } = useProgress();
+  const { achievements } = useAchievements();
   const unlocked = new Set(state.unlockedAchievementIds);
-  const total = ACHIEVEMENTS.length;
-  const unlockedCount = ACHIEVEMENTS.filter((a) => unlocked.has(a.id)).length;
+  const total = achievements.length;
+  const unlockedCount = achievements.filter((a) => unlocked.has(a.id)).length;
   const pct = percent(unlockedCount, total);
   const level = levelFromXp(state.totalXp);
 
@@ -33,7 +34,7 @@ export default function AchievementsPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {ACHIEVEMENTS.map((a) => {
+        {achievements.map((a) => {
           const isUnlocked = unlocked.has(a.id);
           return (
             <Card

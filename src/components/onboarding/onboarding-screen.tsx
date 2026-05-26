@@ -14,9 +14,13 @@ export function OnboardingScreen() {
   const [goal, setGoal] = useState(settings.goal);
   const [minutes, setMinutes] = useState(settings.dailyTimeMinutes);
 
-  function finish() {
-    update({ name: name.trim() || "friend", goal: goal.trim(), dailyTimeMinutes: minutes });
-    completeOnboarding();
+  async function finish() {
+    await update({
+      name: name.trim() || "friend",
+      goal: goal.trim(),
+      dailyTimeMinutes: minutes,
+    });
+    await completeOnboarding();
   }
 
   return (
@@ -122,7 +126,7 @@ export function OnboardingScreen() {
           ) : null}
         </Card>
         <p className="mt-6 text-xs text-muted-foreground text-center">
-          Everything is saved on your device. No accounts, no tracking.
+          Your progress is securely stored in your account.
         </p>
       </div>
     </div>

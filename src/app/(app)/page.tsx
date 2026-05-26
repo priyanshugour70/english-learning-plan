@@ -24,9 +24,9 @@ import { useSettings } from "@/contexts/settings-context";
 import { useProgress } from "@/contexts/progress-context";
 import { useVocabulary } from "@/contexts/vocabulary-context";
 import { useJournal } from "@/contexts/journal-context";
+import { useAchievements } from "@/contexts/achievements-context";
+import { usePlan } from "@/contexts/plan-context";
 import { useCurrentPlanPosition } from "@/hooks/use-current-plan-position";
-import { getDay, getMonth, TOTAL_TASKS } from "@/data/plan";
-import { ACHIEVEMENTS } from "@/data/achievements";
 import { levelFromXp } from "@/lib/gamification";
 import { formatDayLabel, todayKey } from "@/lib/dates";
 import { formatNumber, percent } from "@/lib/utils";
@@ -36,10 +36,13 @@ export default function DashboardPage() {
   const { state } = useProgress();
   const { dueToday, entries: vocabEntries } = useVocabulary();
   const { entries: journalEntries, todayEntry } = useJournal();
+  const { achievements } = useAchievements();
+  const { getMonth, getDay, stats } = usePlan();
   const pos = useCurrentPlanPosition();
 
   const month = getMonth(pos.monthIndex);
   const day = getDay(pos.monthIndex, pos.weekIndex, pos.dayIndex);
+  const TOTAL_TASKS = stats.totalTasks;
 
   const level = levelFromXp(state.totalXp);
 
@@ -325,7 +328,7 @@ export default function DashboardPage() {
           </Link>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          {ACHIEVEMENTS.slice(0, 6).map((a) => {
+          {achievements.slice(0, 6).map((a) => {
             const unlocked = state.unlockedAchievementIds.includes(a.id);
             return (
               <div
