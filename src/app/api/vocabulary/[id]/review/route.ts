@@ -12,7 +12,7 @@ export const POST = withAuth(
   async (
     user,
     request: Request,
-    ctx: RouteContext<"/api/vocabulary/[id]/review">,
+    ctx: { params: Promise<{ id: string }> },
   ) => {
     const { id } = await ctx.params;
     const body = await request.json().catch(() => null);

@@ -11,6 +11,8 @@ export interface AuthedUser {
   email: string;
   name: string;
   isAdmin: boolean;
+  role: "admin" | "learner";
+  avatarUrl?: string;
 }
 
 interface MeResponse {

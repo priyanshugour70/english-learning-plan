@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ensureIndexes, usersCol } from "@/lib/db/collections";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { setSessionCookie } from "@/lib/auth/session";
+import { rateLimit } from "@/lib/rate-limit";
 
 const LoginSchema = z.object({
   email: z.string().email().transform((s) => s.toLowerCase().trim()),
@@ -11,6 +12,23 @@ const LoginSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
+    const limit = rateLimit(ip, "/api/auth/login", { windowMs: 60_000, max: 5 });
+
+    if (!limit.ok) {
+      const retryAfter = Math.ceil((limit.resetAt - Date.now()) / 1000);
+      return Response.json(
+        { error: `Too many login attempts. Try again in ${retryAfter} seconds.` },
+        {
+          status: 429,
+          headers: {
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(limit.resetAt),
+          },
+        },
+      );
+    }
+
     const body = await request.json().catch(() => null);
     const parsed = LoginSchema.safeParse(body);
     if (!parsed.success) {
@@ -49,6 +67,7 @@ export async function POST(request: Request) {
           passwordHash,
           name: adminName,
           isAdmin: true,
+          role: "admin",
           createdAt: now,
         });
         user = await users.findOne({ _id: insert.insertedId });
@@ -81,14 +100,22 @@ export async function POST(request: Request) {
       name: user.name,
     });
 
-    return Response.json({
-      user: {
-        id: user._id!.toString(),
-        email: user.email,
-        name: user.name,
-        isAdmin: user.isAdmin,
+    return Response.json(
+      {
+        user: {
+          id: user._id!.toString(),
+          email: user.email,
+          name: user.name,
+          isAdmin: user.isAdmin,
+        },
       },
-    });
+      {
+        headers: {
+          "X-RateLimit-Remaining": String(limit.remaining),
+          "X-RateLimit-Reset": String(limit.resetAt),
+        },
+      },
+    );
   } catch (e) {
     console.error("[POST /api/auth/login]", e);
     return Response.json(

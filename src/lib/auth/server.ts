@@ -10,6 +10,8 @@ export interface AuthedUser {
   email: string;
   name: string;
   isAdmin: boolean;
+  role: "admin" | "learner";
+  avatarUrl?: string;
 }
 
 function toAuthed(user: UserDoc): AuthedUser {
@@ -18,6 +20,8 @@ function toAuthed(user: UserDoc): AuthedUser {
     email: user.email,
     name: user.name,
     isAdmin: user.isAdmin,
+    role: user.role ?? (user.isAdmin ? "admin" : "learner"),
+    avatarUrl: user.avatarUrl,
   };
 }
 
@@ -70,3 +74,22 @@ export function withAuth<TArgs extends unknown[], TResult>(
     }
   };
 }
+
+export function withAdmin<TArgs extends unknown[], TResult>(
+  handler: (user: AuthedUser, ...args: TArgs) => Promise<TResult>,
+) {
+  return async (...args: TArgs): Promise<TResult | Response> => {
+    try {
+      const user = await requireUser();
+      if (!user.isAdmin) {
+        return Response.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return await handler(user, ...args);
+    } catch (e) {
+      if (e instanceof Response) return e;
+      console.error("[withAdmin] unexpected error", e);
+      return Response.json({ error: "Internal error" }, { status: 500 });
+    }
+  };
+}
+

@@ -12,7 +12,7 @@ const PatchSchema = z.object({
 });
 
 export const PATCH = withAuth(
-  async (user, request: Request, ctx: RouteContext<"/api/vocabulary/[id]">) => {
+  async (user, request: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
     const body = await request.json().catch(() => null);
     const parsed = PatchSchema.safeParse(body);
@@ -35,7 +35,7 @@ export const PATCH = withAuth(
 );
 
 export const DELETE = withAuth(
-  async (user, _req: Request, ctx: RouteContext<"/api/vocabulary/[id]">) => {
+  async (user, _req: Request, ctx: { params: Promise<{ id: string }> }) => {
     const { id } = await ctx.params;
     const col = await vocabularyCol();
     const result = await col.deleteOne({ userId: user.id, id });

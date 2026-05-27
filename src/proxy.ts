@@ -15,18 +15,26 @@ function isPublic(pathname: string): boolean {
   if (pathname.startsWith("/api/auth/")) return true;
   // Seed is idempotent and useful for first-time bootstrap.
   if (pathname.startsWith("/api/seed")) return true;
+  if (pathname.startsWith("/api/health")) return true;
   return false;
+}
+
+function withSecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("X-XSS-Protection", "1; mode=block");
+  return response;
 }
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (isPublic(pathname)) return NextResponse.next();
+  if (isPublic(pathname)) return withSecurityHeaders(NextResponse.next());
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const session = await decryptSession(token);
 
   if (!session) {
-    // For API routes, return 401 JSON so the client can react.
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -36,7 +44,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return withSecurityHeaders(NextResponse.next());
 }
 
 export const config = {

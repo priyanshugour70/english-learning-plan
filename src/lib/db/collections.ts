@@ -22,6 +22,8 @@ export interface UserDoc {
   passwordHash: string;
   name: string;
   isAdmin: boolean;
+  role: "admin" | "learner";
+  avatarUrl?: string;
   createdAt: string;
   lastLoginAt?: string;
 }
@@ -75,6 +77,18 @@ export interface RecordingDoc extends RecordingSession {
   userId: string;
 }
 
+export interface AppConfigDoc {
+  _id?: ObjectId;
+  key: "default";
+  appName: string;
+  appDescription: string;
+  primaryColor: string;
+  accentColors: Record<string, string>;
+  dashboardMessage: string;
+  enableAI: boolean;
+  updatedAt: string;
+}
+
 // =================== Collection accessors ===================
 
 export async function usersCol(): Promise<Collection<UserDoc>> {
@@ -107,6 +121,10 @@ export async function journalCol(): Promise<Collection<JournalDoc>> {
 
 export async function recordingsCol(): Promise<Collection<RecordingDoc>> {
   return (await getDb()).collection<RecordingDoc>("recordings");
+}
+
+export async function configCol(): Promise<Collection<AppConfigDoc>> {
+  return (await getDb()).collection<AppConfigDoc>("config");
 }
 
 // =================== Index management ===================

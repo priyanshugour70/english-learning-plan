@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   BookOpen,
   CalendarDays,
   Compass,
@@ -11,10 +12,12 @@ import {
   Mic,
   NotebookPen,
   Settings,
+  ShieldCheck,
   Sparkles,
   Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/auth-context";
 import { useProgress } from "@/contexts/progress-context";
 import { levelFromXp } from "@/lib/gamification";
 import { ThemeToggle } from "./theme-toggle";
@@ -26,12 +29,15 @@ const NAV_ITEMS = [
   { href: "/vocabulary", label: "Vocabulary", icon: BookOpen },
   { href: "/journal", label: "Journal", icon: NotebookPen },
   { href: "/practice", label: "Practice", icon: Mic },
+  { href: "/ai", label: "AI Coach", icon: Sparkles },
   { href: "/achievements", label: "Achievements", icon: Trophy },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
   const { state, hydrated } = useProgress();
   const level = levelFromXp(state.totalXp);
 
@@ -86,6 +92,27 @@ export function Sidebar() {
               </li>
             );
           })}
+          {user?.isAdmin && (
+            <li>
+              <Link
+                href="/admin"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-[var(--radius)] text-sm transition-colors",
+                  pathname.startsWith("/admin")
+                    ? "bg-primary-soft text-primary-soft-foreground font-medium"
+                    : "text-muted-foreground hover:bg-surface-muted hover:text-foreground",
+                )}
+              >
+                <ShieldCheck
+                  className={cn(
+                    "h-4 w-4",
+                    pathname.startsWith("/admin") && "text-primary-soft-foreground",
+                  )}
+                />
+                <span>Admin</span>
+              </Link>
+            </li>
+          )}
         </ul>
       </nav>
 

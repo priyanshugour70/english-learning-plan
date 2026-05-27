@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarDays, Compass, Home, Mic } from "lucide-react";
+import { BarChart3, CalendarDays, Compass, Home, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MOBILE_NAV_ITEMS = [
@@ -10,7 +10,7 @@ const MOBILE_NAV_ITEMS = [
   { href: "/today", label: "Today", icon: CalendarDays },
   { href: "/plan", label: "Plan", icon: Compass },
   { href: "/practice", label: "Practice", icon: Mic },
-  { href: "/vocabulary", label: "Vocab", icon: BookOpen },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export function MobileNav() {

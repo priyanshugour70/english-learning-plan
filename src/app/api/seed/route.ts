@@ -76,6 +76,7 @@ async function runSeed(force: boolean) {
         passwordHash,
         name: adminName,
         isAdmin: true,
+        role: "admin",
         createdAt: new Date().toISOString(),
       });
       summary.user = "created";
